@@ -199,6 +199,8 @@ class SecurePasswordTest < ActiveModel::TestCase
   end
 
   test "authenticate" do
+    assert_equal ActiveModel::Hashing::BCryptHasher, ActiveModel::SecurePassword.hasher.class
+
     @user.password = "secret"
     @user.recovery_password = "42password"
 
@@ -212,28 +214,24 @@ class SecurePasswordTest < ActiveModel::TestCase
     assert_equal @user, @user.authenticate_recovery_password("42password")
   end
 
-  test "Password digest cost defaults to bcrypt default cost when min_cost is false" do
-    ActiveModel::SecurePassword.min_cost = false
+  test "authenticate with argon2" do
+    ActiveModel::SecurePassword.hasher = :argon2
+    assert_equal ActiveModel::Hashing::Argon2Hasher, ActiveModel::SecurePassword.hasher.class
 
     @user.password = "secret"
-    assert_equal BCrypt::Engine::DEFAULT_COST, @user.password_digest.cost
-  end
+    @user.recovery_password = "42password"
 
-  test "Password digest cost honors bcrypt cost attribute when min_cost is false" do
-    original_bcrypt_cost = BCrypt::Engine.cost
-    ActiveModel::SecurePassword.min_cost = false
-    BCrypt::Engine.cost = 5
+    assert @user.password_digest.start_with?("$argon2id")
 
-    @user.password = "secret"
-    assert_equal BCrypt::Engine.cost, @user.password_digest.cost
+    assert_equal false, @user.authenticate("wrong")
+    assert_equal @user, @user.authenticate("secret")
+
+    assert_equal false, @user.authenticate_password("wrong")
+    assert_equal @user, @user.authenticate_password("secret")
+
+    assert_equal false, @user.authenticate_recovery_password("wrong")
+    assert_equal @user, @user.authenticate_recovery_password("42password")
   ensure
-    BCrypt::Engine.cost = original_bcrypt_cost
-  end
-
-  test "Password digest cost can be set to bcrypt min cost to speed up tests" do
-    ActiveModel::SecurePassword.min_cost = true
-
-    @user.password = "secret"
-    assert_equal BCrypt::Engine::MIN_COST, @user.password_digest.cost
+    ActiveModel::SecurePassword.hasher = :bcrypt
   end
 end

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "active_model/hashing/argon2_hasher"
+require "active_model/hashing/bcrypt_hasher"
+
 module ActiveModel
   module SecurePassword
     extend ActiveSupport::Concern
@@ -11,6 +14,17 @@ module ActiveModel
 
     class << self
       attr_accessor :min_cost # :nodoc:
+      attr_reader :hasher
+
+      def hasher=(hasher_name)
+        if hasher_name == :bcrypt
+          @hasher = ActiveModel::Hashing::BCryptHasher.new
+        elsif hasher_name == :argon2
+          @hasher = ActiveModel::Hashing::Argon2Hasher.new
+        else
+          raise ArgumentError.new("Unknown hasher #{hasher_name}")
+        end
+      end
     end
     self.min_cost = false
 
@@ -59,17 +73,11 @@ module ActiveModel
       #   User.find_by(name: 'david')&.authenticate('notright')      # => false
       #   User.find_by(name: 'david')&.authenticate('mUc3m00RsqyRe') # => user
       def has_secure_password(attribute = :password, validations: true)
-        # Load bcrypt gem only when has_secure_password is used.
-        # This is to avoid ActiveModel (and by extension the entire framework)
-        # being dependent on a binary library.
-        begin
-          require "bcrypt"
-        rescue LoadError
-          $stderr.puts "You don't have bcrypt installed in your application. Please add it to your Gemfile and run bundle install"
-          raise
-        end
-
         include InstanceMethodsOnActivation.new(attribute)
+
+        if ActiveModel::SecurePassword.hasher.nil?
+          ActiveModel::SecurePassword.hasher = :bcrypt
+        end
 
         if validations
           include ActiveModel::Validations
@@ -97,8 +105,8 @@ module ActiveModel
             self.public_send("#{attribute}_digest=", nil)
           elsif !unencrypted_password.empty?
             instance_variable_set("@#{attribute}", unencrypted_password)
-            cost = ActiveModel::SecurePassword.min_cost ? BCrypt::Engine::MIN_COST : BCrypt::Engine.cost
-            self.public_send("#{attribute}_digest=", BCrypt::Password.create(unencrypted_password, cost: cost))
+            digest = ActiveModel::SecurePassword.hasher.digest(unencrypted_password)
+            self.public_send("#{attribute}_digest=", digest)
           end
         end
 
@@ -117,8 +125,7 @@ module ActiveModel
         #   user.authenticate_password('notright')      # => false
         #   user.authenticate_password('mUc3m00RsqyRe') # => user
         define_method("authenticate_#{attribute}") do |unencrypted_password|
-          attribute_digest = public_send("#{attribute}_digest")
-          BCrypt::Password.new(attribute_digest).is_password?(unencrypted_password) && self
+          ActiveModel::SecurePassword.hasher.check_digest(self, attribute, unencrypted_password) && self
         end
 
         alias_method :authenticate, :authenticate_password if attribute == :password

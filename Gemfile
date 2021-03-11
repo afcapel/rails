@@ -16,10 +16,11 @@ gem "rack-cache", "~> 1.2"
 gem "sass-rails"
 gem "turbolinks", "~> 5"
 gem "webpacker", "~> 5.0", require: ENV["SKIP_REQUIRE_WEBPACKER"] != "true"
-# require: false so bcrypt is loaded only when has_secure_password is used.
+# require: false so bcrypt and argon2 are loaded only when has_secure_password is used.
 # This is to avoid Active Model (and by extension the entire framework)
 # being dependent on a binary library.
 gem "bcrypt", "~> 3.1.11", require: false
+gem "argon2", require: false
 
 # This needs to be with require false to avoid it being automatically loaded by
 # sprockets.

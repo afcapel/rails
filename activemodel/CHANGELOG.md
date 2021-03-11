@@ -1,3 +1,7 @@
+*   Add argon2 support to has_secure_password.
+
+    *Alberto Fernández-Capel*
+
 *   Add `in: range`  parameter to `numericality` validator.
 
     *Michal Papis*
